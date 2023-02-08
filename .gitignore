@@ -1,4 +1,5 @@
 bdir/
+obj_dir*/
 simdir/
 *.gtkw
 *.so
