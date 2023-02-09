@@ -28,7 +28,7 @@ module mkTb(Empty);
    
    mkConnection(master.wishbone, slave.wishbone);
    
-   rule rl_master_request;
+   rule rl_master_request (m_dat < 'h10000003);
       MemoryRequest#(32, 32) req = MemoryRequest {write: ?,
                                                   byteen: '1,
                                                   address: ?,
