@@ -1,5 +1,9 @@
 package Wishbone;
 
+export WishboneMaster_IFC(..), WishboneSlave_IFC(..),
+       WishboneMasterXactor_IFC(..), WishboneSlaveXactor_IFC(..),
+       mkWishboneMasterXactor, mkWishboneSlaveXactor;
+
 import Connectable::*;
 import ClientServer::*;
 import FIFOF::*;
@@ -55,10 +59,21 @@ interface WishboneSlaveXactor_IFC#(numeric type aw, numeric type dw);
    interface Client#(MemoryRequest#(aw, dw), MemoryResponse#(dw)) client;
 endinterface
 
+typedef enum {IDLE, ACTIVE} FSMState deriving (Bits, Eq);
+
 module mkWishboneMasterXactor(WishboneMasterXactor_IFC#(aw, dw));
    FIFOF#(MemoryRequest#(aw, dw)) io_req <- mkGFIFOF(False, True);
    FIFOF#(MemoryResponse#(dw))    io_rsp <- mkGFIFOF(True, False);
+   Reg#(FSMState)                 state  <- mkReg(IDLE);
+   Wire#(Bool)                    w_ack  <- mkWire;
 
+   rule rl_fsm;
+      case (state)
+         IDLE:   if (io_req.notEmpty) state <= ACTIVE;
+         ACTIVE: if (!io_req.notEmpty && w_ack) state <= IDLE;
+      endcase
+   endrule
+   
    interface server = toGPServer(io_req, io_rsp);
    
    interface WishboneMaster_IFC wishbone;
@@ -70,9 +85,14 @@ module mkWishboneMasterXactor(WishboneMasterXactor_IFC#(aw, dw));
    
          if (io_req.notEmpty && !stall)
             io_req.deq();
+   
+         w_ack <= ack;
       endmethod
 
-      method Bool               cyc() = io_req.notEmpty;
+      method Bool cyc();
+         return (state == IDLE && io_req.notEmpty) || (state == ACTIVE) ;
+      endmethod
+
       method Bool               stb() = io_req.notEmpty;
       method Bool               we()  = io_req.first.write;
       method Bit#(aw)           adr() = io_req.first.address;
@@ -84,6 +104,7 @@ endmodule
 module mkWishboneSlaveXactor(WishboneSlaveXactor_IFC#(aw, dw));
    FIFOF#(MemoryRequest#(aw, dw)) io_req <- mkGFIFOF(True, False);
    FIFOF#(MemoryResponse#(dw))    io_rsp <- mkGFIFOF(False, True);
+   Reg#(Bool)                     rg_ack <- mkReg(False);
 
    interface client = toGPClient(io_req, io_rsp);
   
@@ -99,10 +120,12 @@ module mkWishboneSlaveXactor(WishboneSlaveXactor_IFC#(aw, dw));
          
          if (io_rsp.notEmpty && cyc)
             io_rsp.deq(); 
+         
+         rg_ack <= io_rsp.notEmpty && cyc;
       endmethod
 
       method Bool     stall() = !io_req.notFull;
-      method Bool     ack()   = io_rsp.notEmpty;
+      method Bool     ack()   = rg_ack;
       method Bit#(dw) dat()   = io_rsp.first.data;
    endinterface
 endmodule
