@@ -5,6 +5,8 @@ simdir/
 *.gtkw
 *.so
 *.vcd
+brun.sh
 bsim
-run.sh
 clean.sh
+vrun.sh
+vsim
