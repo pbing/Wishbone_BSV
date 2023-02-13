@@ -1,8 +1,8 @@
 package Wishbone;
 
 export WishboneMaster_IFC(..), WishboneSlave_IFC(..),
-       WishboneMasterXactor_IFC(..), WishboneSlaveXactor_IFC(..),
-       mkWishboneMasterXactor, mkWishboneSlaveXactor;
+WishboneMasterXactor_IFC(..), WishboneSlaveXactor_IFC(..),
+mkWishboneMasterXactor, mkWishboneSlaveXactor;
 
 import Connectable::*;
 import ClientServer::*;
@@ -61,32 +61,33 @@ endinterface
 
 typedef enum {IDLE, ACTIVE} FSMState deriving (Bits, Eq);
 
-module mkWishboneMasterXactor(WishboneMasterXactor_IFC#(aw, dw));
-   FIFOF#(MemoryRequest#(aw, dw)) io_req <- mkGFIFOF(False, True);
-   FIFOF#(MemoryResponse#(dw))    io_rsp <- mkGFIFOF(True, False);
-   Reg#(FSMState)                 state  <- mkReg(IDLE);
-   Wire#(Bool)                    w_ack  <- mkWire;
+module mkWishboneMasterXactor#(parameter Integer n) (WishboneMasterXactor_IFC#(aw, dw));
+   FIFOF#(MemoryRequest#(aw, dw)) io_req    <- mkGFIFOF(False, True);
+   FIFOF#(MemoryResponse#(dw))    io_rsp    <- mkGFIFOF(True, False);
+   FIFOF#(Bit#(0))                ack_queue <- mkUGSizedFIFOF(n);
+   Reg#(FSMState)                 state     <- mkReg(IDLE);
 
    rule rl_fsm;
       case (state)
-         IDLE:   if (io_req.notEmpty) state <= ACTIVE;
-         ACTIVE: if (!io_req.notEmpty && w_ack) state <= IDLE;
+         IDLE:   if (io_req.notEmpty)                         state <= ACTIVE;
+         ACTIVE: if (!io_req.notEmpty && !ack_queue.notEmpty) state <= IDLE;
       endcase
    endrule
-   
+
    interface server = toGPServer(io_req, io_rsp);
-   
+
    interface WishboneMaster_IFC wishbone;
       method Action put(Bool stall, Bool ack, Bit#(dw) dat);
          if (io_rsp.notFull && ack) begin
             MemoryResponse#(dw) rsp = MemoryResponse {data: dat};
             io_rsp.enq(rsp);
+            ack_queue.enq(?);
          end
-   
-         if (io_req.notEmpty && !stall)
-            io_req.deq();
-   
-         w_ack <= ack;
+
+         if (io_req.notEmpty) io_req.deq();
+
+         if (ack_queue.notEmpty)
+            ack_queue.deq();
       endmethod
 
       method Bool cyc();
@@ -101,31 +102,32 @@ module mkWishboneMasterXactor(WishboneMasterXactor_IFC#(aw, dw));
    endinterface
 endmodule
 
-module mkWishboneSlaveXactor(WishboneSlaveXactor_IFC#(aw, dw));
-   FIFOF#(MemoryRequest#(aw, dw)) io_req <- mkGFIFOF(True, False);
-   FIFOF#(MemoryResponse#(dw))    io_rsp <- mkGFIFOF(False, True);
-   Reg#(Bool)                     rg_ack <- mkReg(False);
+module mkWishboneSlaveXactor#(parameter Integer n) (WishboneSlaveXactor_IFC#(aw, dw));
+   FIFOF#(MemoryRequest#(aw, dw)) io_req    <- mkGFIFOF(True, False);
+   FIFOF#(MemoryResponse#(dw))    io_rsp    <- mkGFIFOF(False, True);
+   FIFOF#(Bit#(0))                req_queue <- mkUGSizedFIFOF(n);
 
    interface client = toGPClient(io_req, io_rsp);
-  
+
    interface WishboneSlave_IFC wishbone;
       method Action put(Bool cyc, Bool stb, Bool we, Bit#(aw) adr, Bit#(TDiv#(dw, 8)) sel, Bit#(dw) dat);
-         if (io_req.notFull && cyc && stb) begin
+         if (io_req.notFull && req_queue.notFull && cyc && stb) begin
             MemoryRequest#(aw, dw) req = MemoryRequest {write: we,
                                                         byteen: sel,
                                                         address: adr,
                                                         data: dat};
             io_req.enq(req);
+            req_queue.enq(?);
          end
-         
-         if (io_rsp.notEmpty && cyc)
-            io_rsp.deq(); 
-         
-         rg_ack <= io_rsp.notEmpty && cyc;
+
+         if (cyc && io_rsp.notEmpty && req_queue.notEmpty) begin
+            io_rsp.deq();
+            req_queue.deq();
+         end
       endmethod
 
       method Bool     stall() = !io_req.notFull;
-      method Bool     ack()   = rg_ack;
+      method Bool     ack()   = io_rsp.notEmpty && req_queue.notEmpty;
       method Bit#(dw) dat()   = io_rsp.first.data;
    endinterface
 endmodule
