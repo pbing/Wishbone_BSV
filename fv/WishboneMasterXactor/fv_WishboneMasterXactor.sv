@@ -271,8 +271,8 @@ module fv_WishboneMasterXactor
 
    generate
       if (F_MAX_REQUESTS >= 2) c_2_xactions: cover property(p_xactions(2));
-      if (F_MAX_REQUESTS >= 5) c_5_xactions: cover property(p_xactions(5));
+      if (F_MAX_REQUESTS >= 8) c_8_xactions: cover property(p_xactions(8));
    endgenerate
 endmodule
 
-bind mkWishboneMasterXactor_32_32 fv_WishboneMasterXactor fv(.*);
+bind mkWishboneMasterXactor_32_32_8 fv_WishboneMasterXactor fv(.*);

@@ -255,6 +255,18 @@ module fv_WishboneSlaveXactor
    // transactions, even though nothing is outstanding.  For
    // these busses, turn F_OPT_RMW_BUS_OPTION on.
 
+   // --------------------------------------------------------------------------
+
+   property p_xactions(n);
+      //$rose(CYC_I) |=> (ACK_O[=n] within CYC_I[*n:$]) ##1 (!CYC_I and !ACK_O);
+      $fell(CYC_I) |-> (f_nreqs == n && f_nacks == n);
+   endproperty
+   c_1_xaction: cover property(p_xactions(1));
+
+   generate
+      if (F_MAX_REQUESTS >= 2) c_2_xactions: cover property(p_xactions(2));
+      if (F_MAX_REQUESTS >= 8) c_8_xactions: cover property(p_xactions(8));
+   endgenerate
 endmodule
 
-bind mkWishboneSlaveXactor_32_32 fv_WishboneSlaveXactor fv(.*);
+bind mkWishboneSlaveXactor_32_32_8 fv_WishboneSlaveXactor fv(.*);
