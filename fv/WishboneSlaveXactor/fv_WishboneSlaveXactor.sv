@@ -47,6 +47,20 @@ module fv_WishboneSlaveXactor
    default disable iff (!RST_N);
 
    /********************************************************************************
+    * BSV handshakes
+    ********************************************************************************/
+
+   property p_client_request_rdy_en;
+      EN_client_request_get |-> RDY_client_request_get;
+   endproperty
+   a_client_request_rdy_en: assume property(p_client_request_rdy_en);
+
+   property p_client_response_rdy_en;
+      EN_client_response_put |-> RDY_client_response_put;
+   endproperty
+   a_client_response_rdy_en: assume property(p_client_response_rdy_en);
+
+   /********************************************************************************
     * Bus requests
     ********************************************************************************/
 
@@ -94,9 +108,9 @@ module fv_WishboneSlaveXactor
 
    // Write requests must also set one (or more) of SEL
    property p_req_wrt_sel;
-      client_request_get[68] |-> $countones(client_request_get[67:64] > 0);
+      RDY_client_request_get && client_request_get[68] |-> $countones(client_request_get[67:64] > 0);
    endproperty
-   //FIXME a_req_wrt_sel: assert property(p_req_wrt_sel);
+   a_req_wrt_sel: assert property(p_req_wrt_sel);
 
    property p_wb_wrt_sel;
       STB_I && WE_I |-> $countones(SEL_I) > 0;
@@ -111,7 +125,7 @@ module fv_WishboneSlaveXactor
    property p_ncyc_nack;
       $past(!CYC_I) |-> !ACK_O;
    endproperty
-   //FIXME a_ncyc_nack: assert property(p_ncyc_nack);
+   a_ncyc_nack: assert property(p_ncyc_nack);
 
    // --------------------------------------------------------------------------
 
@@ -158,7 +172,7 @@ module fv_WishboneSlaveXactor
          property p_max_stall;
             CYC_I |-> (f_stall_count < F_MAX_STALL);
          endproperty
-         // FIXME a_max_stall: assert property(p_max_stall);
+         a_max_stall: assert property(p_max_stall);
       end
    endgenerate
 
@@ -183,7 +197,7 @@ module fv_WishboneSlaveXactor
          property p_max_ack_delay;
             CYC_I && !STB_I && !ACK_O && (f_outstanding() > 0) |-> (f_ackwait_count < F_MAX_ACK_DELAY);
          endproperty
-         // FixME a_max_ack_delay: assert property(p_max_ack_delay);
+         a_max_ack_delay: assert property(p_max_ack_delay);
       end
    endgenerate
 
@@ -222,7 +236,7 @@ module fv_WishboneSlaveXactor
    property p_nreqs_nacks;
       CYC_I |-> (f_nacks <= f_nreqs);
    endproperty
-   //FIXME a_nregs_nacks: assert property(p_nreqs_nacks);
+   a_nregs_nacks: assert property(p_nreqs_nacks);
 
    // --------------------------------------------------------------------------
 
@@ -233,7 +247,7 @@ module fv_WishboneSlaveXactor
    property p_outstanding_1;
       CYC_I && (f_outstanding() == 0) |-> !ACK_O || (STB_I && !STALL_O);
    endproperty
-   //FIXME a_outstanding_1: assert property(p_outstanding_1);
+   a_outstanding_1: assert property(p_outstanding_1);
 
    property p_outstanding_2;
       !CYC_I && (f_outstanding() == 0) |-> !ACK_O;

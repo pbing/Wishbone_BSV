@@ -1,9 +1,13 @@
+.simvision/
 bdir/
 jgproject/
 obj_dir*/
 simdir/
+*.dsn
 *.gtkw
 *.so
+*.svcf
+*.trn
 *.vcd
 brun.sh
 bsim

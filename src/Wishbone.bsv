@@ -74,6 +74,10 @@ module mkWishboneMasterXactor#(parameter Integer n) (WishboneMasterXactor_IFC#(a
       endcase
    endrule
 
+   rule rl_ack_deq;
+      if (ack_queue.notEmpty) ack_queue.deq();
+   endrule
+
    interface server = toGPServer(io_req, io_rsp);
 
    interface WishboneMaster_IFC wishbone;
@@ -84,10 +88,7 @@ module mkWishboneMasterXactor#(parameter Integer n) (WishboneMasterXactor_IFC#(a
             ack_queue.enq(?);
          end
 
-         if (io_req.notEmpty) io_req.deq();
-
-         if (ack_queue.notEmpty)
-            ack_queue.deq();
+         if (io_req.notEmpty && !stall) io_req.deq();
       endmethod
 
       method Bool cyc();
@@ -119,8 +120,10 @@ module mkWishboneSlaveXactor#(parameter Integer n) (WishboneSlaveXactor_IFC#(aw,
             io_req.enq(req);
             req_queue.enq(?);
          end
-
-         if (cyc && io_rsp.notEmpty && req_queue.notEmpty) begin
+      
+         if (!cyc)
+            req_queue.clear();
+         else if (io_rsp.notEmpty && req_queue.notEmpty) begin
             io_rsp.deq();
             req_queue.deq();
          end

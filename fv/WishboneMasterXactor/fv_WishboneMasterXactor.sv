@@ -53,6 +53,20 @@ module fv_WishboneMasterXactor
    default disable iff (!RST_N);
 
    /********************************************************************************
+    * BSV handshakes
+    ********************************************************************************/
+
+   property p_server_request_rdy_en;
+      EN_server_request_put |-> RDY_server_request_put;
+   endproperty
+   a_server_request_rdy_en: assume property(p_server_request_rdy_en);
+
+   property p_server_response_rdy_en;
+      EN_server_response_get |-> RDY_server_response_get;
+   endproperty
+   a_server_response_rdy_en: assume property(p_server_response_rdy_en);
+
+   /********************************************************************************
     * Bus requests
     ********************************************************************************/
 
@@ -83,10 +97,10 @@ module fv_WishboneMasterXactor
 
    // Within any series of STB/requests, the direction of the request
    // may not change.
-   property p_stb_stable_we;
-      $past(STB_O) && STB_O |-> $stable(WE_O);
-   endproperty
-   //FIXME a_stb_stable_we: assert property(p_stb_stable_we);
+   //property p_stb_stable_we;
+   //   $past(STB_O) && STB_O |-> $stable(WE_O);
+   //endproperty
+   //a_stb_stable_we: assert property(p_stb_stable_we);
 
    // --------------------------------------------------------------------------
 
@@ -100,7 +114,7 @@ module fv_WishboneMasterXactor
 
    // Write requests must also set one (or more) of SEL
    property p_req_wrt_sel;
-      server_request_put[68] |-> $countones(server_request_put[67:64] > 0);
+      RDY_server_request_put && EN_server_request_put && server_request_put[68] |-> $countones(server_request_put[67:64] > 0);
    endproperty
    a_req_wrt_sel: assume property(p_req_wrt_sel);
 
@@ -215,10 +229,10 @@ module fv_WishboneMasterXactor
 
    // --------------------------------------------------------------------------
 
-   //property p_nreqs_1;
-   //   CYC_O && STB_O |-> (f_nreqs < F_MAX_REQUESTS);
-   //endproperty
-   //a_nreqs_1: assert property(p_nreqs_1);
+   property p_nreqs_1;
+      CYC_O && STB_O |-> (f_nreqs < F_MAX_REQUESTS);
+   endproperty
+   a_nreqs_1: assert property(p_nreqs_1);
 
    property p_nreqs_2;
       CYC_O && !STB_O |-> (f_nreqs <= F_MAX_REQUESTS);
@@ -254,13 +268,13 @@ module fv_WishboneMasterXactor
    property p_end_request;
       (f_outstanding() == 0) |-> STB_O || !CYC_O;
    endproperty
-   // FIXME a_end_request: assert property(p_end_request);
+   a_end_request: assert property(p_end_request);
    // Not all masters will abide by this restriction.  Some
    // masters may wish to implement read-modify-write bus
    // interactions.  These masters need to keep CYC high between
    // transactions, even though nothing is outstanding.  For
    // these busses, turn F_OPT_RMW_BUS_OPTION on.
-   
+
    // --------------------------------------------------------------------------
 
    property p_xactions(n);
