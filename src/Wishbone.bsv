@@ -64,35 +64,37 @@ typedef enum {IDLE, ACTIVE} FSMState deriving (Bits, Eq);
 module mkWishboneMasterXactor#(parameter Integer n) (WishboneMasterXactor_IFC#(aw, dw));
    FIFOF#(MemoryRequest#(aw, dw)) io_req    <- mkGFIFOF(False, True);
    FIFOF#(MemoryResponse#(dw))    io_rsp    <- mkGFIFOF(True, False);
-   FIFOF#(Bit#(0))                ack_queue <- mkUGSizedFIFOF(n);
+   FIFOF#(Bit#(0))                hs_queue  <- mkUGSizedFIFOF(n);
    Reg#(FSMState)                 state     <- mkReg(IDLE);
-
+   
    rule rl_fsm;
       case (state)
-         IDLE:   if (io_req.notEmpty)                         state <= ACTIVE;
-         ACTIVE: if (!io_req.notEmpty && !ack_queue.notEmpty) state <= IDLE;
+         IDLE:   if (io_req.notEmpty)    state <= ACTIVE;
+         ACTIVE: if (!hs_queue.notEmpty) state <= IDLE;
       endcase
-   endrule
-
-   rule rl_ack_deq;
-      if (ack_queue.notEmpty) ack_queue.deq();
    endrule
 
    interface server = toGPServer(io_req, io_rsp);
 
    interface WishboneMaster_IFC wishbone;
       method Action put(Bool stall, Bool ack, Bit#(dw) dat);
-         if (io_rsp.notFull && ack) begin
-            MemoryResponse#(dw) rsp = MemoryResponse {data: dat};
-            io_rsp.enq(rsp);
-            ack_queue.enq(?);
+         if (io_req.notEmpty && !stall) begin
+            io_req.deq();
+            if (hs_queue.notFull) hs_queue.enq(?);
          end
 
-         if (io_req.notEmpty && !stall) io_req.deq();
+         if (ack) begin
+            MemoryResponse#(dw) rsp = MemoryResponse {data: dat};
+            if (io_rsp.notFull) io_rsp.enq(rsp);
+            if (hs_queue.notEmpty) hs_queue.deq();
+         end
       endmethod
 
       method Bool cyc();
-         return (state == IDLE && io_req.notEmpty) || (state == ACTIVE) ;
+         case (state)
+            IDLE:   return io_req.notEmpty;
+            ACTIVE: return io_req.notEmpty || hs_queue.notEmpty;
+         endcase
       endmethod
 
       method Bool               stb() = io_req.notEmpty;
