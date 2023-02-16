@@ -6,7 +6,7 @@
 `default_nettype none
 
 module fv_WishboneMasterXactor
-  #(parameter F_MAX_REQUESTS = 1)
+  #(parameter F_MAX_OUTSTANDING = 1)
    (input wire  CLK,
     input wire  RST_N,
 
@@ -43,7 +43,7 @@ module fv_WishboneMasterXactor
     input wire [31 : 0] server_response_get,
     input wire RDY_server_response_get);
 
-   bit [$clog2(F_MAX_REQUESTS+1)-1:0] f_nreqs, f_nacks;
+   bit signed [$clog2(F_MAX_OUTSTANDING+1):0] f_bsv_outstanding, f_outstanding;
 
    default clocking @(posedge CLK);
    endclocking;
@@ -63,6 +63,27 @@ module fv_WishboneMasterXactor
       EN_server_response_get |-> RDY_server_response_get;
    endproperty
    a_server_response_rdy_en: assume property(p_server_response_rdy_en);
+
+   // --------------------------------------------------------------------------
+
+   // Count the number of outstanding BSV handshakes
+   always @(posedge CLK)
+     if (!RST_N)
+       f_bsv_outstanding <= 0;
+     else begin
+        if (RDY_server_request_put && EN_server_request_put)   f_bsv_outstanding +=1;
+        if (RDY_server_response_get && EN_server_response_get) f_bsv_outstanding +=1;
+     end
+
+   property p_bsv_overflow;
+      f_outstanding <= F_MAX_OUTSTANDING;
+   endproperty
+   a_bsv_overflow: assume property(p_bsv_overflow);
+
+   property p_bsv_underflow;
+      f_outstanding >= 0;
+   endproperty
+   a_bsv_underflow: assume property(p_bsv_underflow);
 
    /********************************************************************************
     * Bus requests
@@ -116,47 +137,32 @@ module fv_WishboneMasterXactor
 
    // --------------------------------------------------------------------------
 
-   // Count the number of requests that have been made
+   // Count the number of outstanding acknowledges
    always @(posedge CLK)
      if (!RST_N)
-       f_nreqs <= 0;
-     else
-       if (!CYC_O)
-         f_nreqs <= 0;
-       else if (STB_O && !STALL_I)
-         f_nreqs += 1;
+       f_outstanding <= 0;
+     else begin
+        if (STB_O && !STALL_I) f_outstanding += 1;
+        if (ACK_I)             f_outstanding -= 1;
+     end
 
-   // Count the number of acknowledgements that have been received
-   always @(posedge CLK)
-     if (!RST_N)
-       f_nacks <= 0;
-     else
-       if (!CYC_O)
-         f_nacks <= 0;
-       else if (ACK_I)
-         f_nacks += 1;
-
-   function [$clog2(F_MAX_REQUESTS+1)-1:0] f_outstanding();
-      return f_nreqs - f_nacks;
-   endfunction
-
-   // every STB got exactly one ACK
-   property p_stb_ack;
-      $fell(CYC_O) |-> (f_outstanding() == 0);
+   property p_overflow;
+      f_outstanding <= F_MAX_OUTSTANDING;
    endproperty
-   a_stb_ack: assume property(p_stb_ack);
+   a_overflow: assert property(p_overflow);
+
+   property p_underflow;
+      f_outstanding >= 0;
+   endproperty
+   a_underflow: assert property(p_underflow);
 
    // --------------------------------------------------------------------------
 
-   property p_xactions(n);
-      $fell(CYC_O) |-> (f_nreqs == n && f_nacks == n);
+   // every STB got exactly one ACK
+   property p_stb_ack;
+      $fell(CYC_O) |-> (f_outstanding == 0);
    endproperty
-   c_1_xaction: cover property(p_xactions(1));
-
-   generate
-      if (F_MAX_REQUESTS >= 2) c_2_xactions: cover property(p_xactions(2));
-      if (F_MAX_REQUESTS >= 8) c_8_xactions: cover property(p_xactions(8));
-   endgenerate
+   a_stb_ack: assume property(p_stb_ack);
 endmodule
 
 bind mkWishboneMasterXactor_32_32_8 fv_WishboneMasterXactor fv(.*);
